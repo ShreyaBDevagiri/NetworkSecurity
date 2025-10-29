@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 
-class BasicRelayServer:
+class RelayServer:
     def __init__(self, host: str = '0.0.0.0', port: int = 5000):
         self.host = host
         self.port = port
@@ -255,5 +255,5 @@ if __name__ == "__main__":
     print("="*60)
     print()
     
-    relay = BasicRelayServer(host='0.0.0.0', port=5000)
+    relay = RelayServer(host='0.0.0.0', port=5000)
     relay.start()
