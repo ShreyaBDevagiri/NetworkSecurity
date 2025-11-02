@@ -1,5 +1,5 @@
 """
-Basic Chat Client for Deliverable 1
+Chat Client
 Handles TCP connection, registration, and message sending/receiving
 """
 
@@ -42,16 +42,16 @@ class Client:
             return True
         
         except ConnectionRefusedError:
-            print(f"[{self.client_id}] ✗ Connection refused - Is relay server running?")
+            print(f"[{self.client_id}] X Connection refused - Is relay server running?")
             return False
         except Exception as e:
-            print(f"[{self.client_id}] ✗ Connection failed: {e}")
+            print(f"[{self.client_id}] X Connection failed: {e}")
             return False
     
     def register(self) -> bool:
         """Register with the relay server"""
         if not self.socket:
-            print(f"[{self.client_id}] ✗ Not connected to relay")
+            print(f"[{self.client_id}] X Not connected to relay")
             return False
         
         print(f"[{self.client_id}] Sending registration request...")
@@ -74,7 +74,7 @@ class Client:
     def send_chat_message(self, recipient_id: str, message_text: str) -> bool:
         """Send a chat message to another client through relay"""
         if not self.registered:
-            print(f"[{self.client_id}] ✗ Not registered with relay")
+            print(f"[{self.client_id}] X Not registered with relay")
             return False
         
         print(f"[{self.client_id}] Sending message to '{recipient_id}'...")
@@ -92,7 +92,7 @@ class Client:
     def list_clients(self):
         """Request list of registered clients from relay"""
         if not self.socket:
-            print(f"[{self.client_id}] ✗ Not connected to relay")
+            print(f"[{self.client_id}] X Not connected to relay")
             return
         
         message = {
@@ -155,7 +155,7 @@ class Client:
             print(f"[{self.client_id}]   Time: {timestamp}\n")
         else:
             self.registered = False
-            print(f"[{self.client_id}] ✗ Registration failed!")
+            print(f"[{self.client_id}] X Registration failed!")
             print(f"[{self.client_id}]   {msg}\n")
     
     def handle_incoming_message(self, message: dict):
@@ -203,7 +203,7 @@ class Client:
         error_msg = message.get('message')
         timestamp = message.get('timestamp')
         
-        print(f"[{self.client_id}] ✗ ERROR: {error_msg}")
+        print(f"[{self.client_id}] X ERROR: {error_msg}")
         print(f"[{self.client_id}]   Time: {timestamp}\n")
     
     def send_message(self, data: bytes):
@@ -308,7 +308,7 @@ class Client:
 def main():
     """Main entry point for the client"""
     print("="*60)
-    print("SECURE RELAY-BASED CHAT SYSTEM - DELIVERABLE 1")
+    print("SECURE RELAY-BASED CHAT SYSTEM ")
     print("Chat Client")
     print("="*60)
     print()

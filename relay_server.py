@@ -1,5 +1,5 @@
 """
-Basic Relay Server for Deliverable 1
+Relay Server
 Handles TCP connections, registration, and message forwarding
 """
 
@@ -250,7 +250,7 @@ class RelayServer:
 
 if __name__ == "__main__":
     print("="*60)
-    print("SECURE RELAY-BASED CHAT SYSTEM - DELIVERABLE 1")
+    print("SECURE RELAY-BASED CHAT SYSTEM")
     print("Relay Server")
     print("="*60)
     print()
