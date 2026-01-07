@@ -362,13 +362,25 @@ class SecureClient:
             "payload": json.dumps(payload)
         }
         
-        # Outer MAC for relay authentication
+        # Outer MAC (prevents relay tampering)
+        # Authenticates: session_id + seq_num + timestamp + payload
+        mac_outer = self._compute_hmac(
+            session["k_mac_send"],
+            session["session_id"],
+            str(seq_num).encode(),
+            timestamp.encode(),
+            json.dumps(payload).encode()
+        )
+        
+        message["mac_outer"] = mac_outer.hex()
         message_json = json.dumps(message)
         
         print(f"[{self.client_id}]  Encryption details:")
         # print(f"[{self.client_id}]   - IV: {iv.hex()[:32]}...")
         # print(f"[{self.client_id}]   - Ciphertext length: {len(encrypted_inner)} bytes")
         # print(f"[{self.client_id}]   - Inner MAC: {mac_inner.hex()[:32]}...")
+        # print(f"[{self.client_id}]   - Outer MAC: {mac_outer.hex()[:32]}...")
+        print(f"[{self.client_id}]   - Relay tampering protection: outer MAC")
         print(f"[{self.client_id}]   - Replay protection: timestamp + sequence")
         print(f"[{self.client_id}]   - Message saved to history (use 'history' command)\n")
         
@@ -408,17 +420,40 @@ class SecureClient:
         
         session = self.sessions[sender_id]
         
-        session = self.sessions[sender_id]
-        
         # Parse payload
         payload = json.loads(payload_str)
         iv = bytes.fromhex(payload["iv"])
         ciphertext = bytes.fromhex(payload["ciphertext"])
         mac_inner = bytes.fromhex(payload["mac_inner"])
+        mac_outer_hex = message.get("mac_outer")
         
         print(f"[{self.client_id}]  Decrypting message...")
         
-        # PRIORITY 1: Verify inner MAC first (integrity check)
+        # PRIORITY 0: Verify outer MAC first (detect relay tampering)
+        if not mac_outer_hex:
+            print(f"[{self.client_id}]  RELAY TAMPERING DETECTED!")
+            print(f"[{self.client_id}]   - Outer MAC missing")
+            print(f"[{self.client_id}]   - Message REJECTED (relay may have modified it)\n")
+            return
+        
+        mac_outer = bytes.fromhex(mac_outer_hex)
+        expected_mac_outer = self._compute_hmac(
+            session["k_mac_recv"],
+            session["session_id"],
+            str(seq_num).encode(),
+            timestamp.encode(),
+            payload_str.encode()
+        )
+        
+        if mac_outer != expected_mac_outer:
+            print(f"[{self.client_id}]  RELAY TAMPERING DETECTED!")
+            print(f"[{self.client_id}]   - Outer MAC verification failed")
+            print(f"[{self.client_id}]   - Message REJECTED (relay tampered with message)\n")
+            return
+        
+        print(f"[{self.client_id}]  Outer MAC verified - relay did not tamper")
+        
+        # PRIORITY 1: Verify inner MAC (integrity check between peers)
         expected_mac = self._compute_hmac(
             session["k_mac_recv"],
             ciphertext,
@@ -770,6 +805,14 @@ class SecureClient:
                     elif cmd == "lists":
                         self.request_connected_clients()
                     
+                    elif cmd == "relay_tamper":
+                        if len(parts) < 2:
+                            print(f"Usage: relay_tamper <peer_id>\n")
+                            print(f"This tells the relay to tamper with the next message to <peer_id>")
+                            print(f"The client will detect the tampering via outer MAC\n")
+                        else:
+                            self.trigger_relay_tampering(parts[1])
+                    
                     elif cmd == "help":
                         print("\nCommands:")
                         print("  session <peer_id>       - Establish secure session")
@@ -780,6 +823,7 @@ class SecureClient:
                         print("  corrupt <peer> <index>  - Test tampering detection (MAC)")
                         print("  sessions                - List active sessions")
                         print("  lists                   - List all clients on relay")
+                        print("  relay_tamper <peer>     - Trigger relay tampering (outer MAC test)")
                         print("  quit                    - Exit\n")
                     
                     else:
@@ -1024,6 +1068,26 @@ class SecureClient:
                 print(f"  {idx}. {client_id} ({status})")
         
         print(f"{'='*70}\n")
+    
+    def trigger_relay_tampering(self, peer_id: str):
+        """Trigger relay server to tamper with next message (testing)"""
+        if peer_id not in self.sessions:
+            print(f"\n[{self.client_id}] No session with '{peer_id}'\n")
+            return
+        
+        # Signal relay to tamper with next message by setting flag
+        request = {
+            "msg_type": "RELAY_TAMPER_TEST",
+            "from": self.client_id,
+            "to": peer_id,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        print(f"\n[{self.client_id}] Triggering relay tampering for next message to '{peer_id}'")
+        print(f"[{self.client_id}] Send your next message - relay will corrupt the outer MAC")
+        print(f"[{self.client_id}] Recipient will detect: RELAY TAMPERING DETECTED!\n")
+        
+        self.send_message(json.dumps(request).encode())
 
 
 def main():
