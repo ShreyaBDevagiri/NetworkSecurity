@@ -191,6 +191,9 @@ class SecureRelayServer:
                     elif msg_type == "REQUEST_CLIENT_LIST":
                         self.handle_client_list_request(client_socket, message)
                     
+                    elif msg_type == "RELAY_TAMPER_TEST":
+                        self.handle_tamper_trigger(client_socket, message)
+                    
                     else:
                         print(f"[{self.relay_id}] Unknown message type: {msg_type}")
                 
@@ -484,12 +487,29 @@ class SecureRelayServer:
             
             recipient_socket = self.clients[recipient_id]["socket"]
         
+        # Check if relay should tamper (for testing outer MAC protection)
+        should_tamper = hasattr(self, 'tamper_next_message') and self.tamper_next_message
+        
+        if should_tamper:
+            print(f"[{self.relay_id}] TAMPERING WITH OUTER MAC (Testing outer MAC detection)")
+            if "mac_outer" in message:
+                mac_outer_bytes = bytes.fromhex(message["mac_outer"])
+                tampered_bytes = bytearray(mac_outer_bytes)
+                if len(tampered_bytes) > 0:
+                    tampered_bytes[0] = (tampered_bytes[0] + 1) % 256
+                    message["mac_outer"] = tampered_bytes.hex()
+                print(f"[{self.relay_id}] Outer MAC corrupted - recipient will detect tampering")
+            self.tamper_next_message = False
+        
         # Forward the encrypted message (relay cannot decrypt)
         print(f"[{self.relay_id}] Forwarding encrypted payload (cannot decrypt)")
         self.send_message(recipient_socket, json.dumps(message).encode())
         
-        print(f"[{self.relay_id}] Encrypted message forwarded successfully")
-        print(f"[{self.relay_id}] End-to-end confidentiality maintained\n")
+        if should_tamper:
+            print(f"[{self.relay_id}] Tampered message forwarded - watch recipient for detection\n")
+        else:
+            print(f"[{self.relay_id}] Encrypted message forwarded successfully")
+            print(f"[{self.relay_id}] End-to-end confidentiality maintained\n")
     
     def handle_client_list_request(self, client_socket: socket.socket, message: dict):
         """Handle request for list of connected clients"""
@@ -515,6 +535,26 @@ class SecureRelayServer:
         self.send_message(client_socket, json.dumps(response).encode())
         
         print(f"[{self.relay_id}] Client list sent to '{requester_id}'\n")
+    
+    def handle_tamper_trigger(self, client_socket: socket.socket, message: dict):
+        """Handle relay tampering trigger (for testing outer MAC detection)"""
+        with self.lock:
+            if client_socket not in self.socket_to_client:
+                print(f"[{self.relay_id}] Tamper request from unregistered client")
+                return
+            
+            requester_id = self.socket_to_client[client_socket]
+        
+        target_id = message.get('to')
+        
+        print(f"\n[{self.relay_id}] RELAY TAMPERING TEST TRIGGERED")
+        print(f"[{self.relay_id}] By: '{requester_id}'")
+        print(f"[{self.relay_id}] Target: '{target_id}'")
+        print(f"[{self.relay_id}] Next message to '{target_id}' will have corrupted outer MAC")
+        print(f"[{self.relay_id}] Recipient will detect: RELAY TAMPERING DETECTED!\n")
+        
+        # Set flag for tampering on next message to this target
+        self.tamper_next_message = True
     
     def _send_error(self, client_socket: socket.socket, error_msg: str):
         """Send error message to client"""
